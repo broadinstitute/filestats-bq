@@ -46,7 +46,7 @@ Additionally, the following holds true if `Path` is a _symlink_:
 Here, the difference in semantics stems from the purpose of this module
 to determine the attributes of the actual _files_, not _links_, where possible.
 However, if a _link_ is _broken_ (i.e. its target file does not exist
-or cannot be accessed, then we resort to displaying the attributes of the _link_ itself).
+or cannot be accessed), then we resort to displaying the attributes of the _link_ itself.
 
 Additionally, you can see the cause of a failure of link resolution
 in the `Error` field, such as `lstat /path/to/linked/file: no such file or directory`.
