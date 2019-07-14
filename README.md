@@ -1,4 +1,4 @@
-# filestat-bq
+# filestats-bq
 
 This repository implements a Go module
 to catalogue on-prem files in BigQuery.
@@ -6,14 +6,14 @@ to catalogue on-prem files in BigQuery.
 ## Usage
 
 ```
-go get github.com/broadinstitute/filestat-bq
+go get github.com/broadinstitute/filestats-bq
 
-filestat-bq --dir /path/to/dir --regex '\.txt$' \
+filestats-bq --dir /path/to/dir --regex '\.txt$' \
   --key /path/to/service_account_key.json \
   --project test-project --dataset test_dataset --table test_txt
 ```
 
-`filestat-bq` can also be distributed as a single executable
+`filestats-bq` can also be distributed as a single executable
 to a different system, so you don't have to have Go installed there.
 
 To build the executable for 64-bit Linux on a Mac, just run

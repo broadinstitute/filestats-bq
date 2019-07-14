@@ -1,4 +1,4 @@
-module github.com/broadinstitute/filestat-bq
+module github.com/broadinstitute/filestats-bq
 
 go 1.12
 
