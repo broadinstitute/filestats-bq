@@ -3,6 +3,24 @@
 This repository implements a Go module
 to catalogue on-prem files in BigQuery.
 
+## Usage
+
+```
+go get github.com/broadinstitute/filestat-bq
+
+filestat-bq --dir /path/to/dir --regex '\.txt$' \
+  --key /path/to/service_account_key.json \
+  --project test-project --dataset test_dataset --table test_txt
+```
+
+`filestat-bq` can also be distributed as a single executable
+to a different system, so you don't have to have Go installed there.
+
+To build the executable for 64-bit Linux on a Mac, just run
+```
+GOOS=linux GOARCH=amd64 go build
+```
+
 ## Algorithm
 
 1.  Parse command line flags, which include
