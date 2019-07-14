@@ -101,7 +101,8 @@ func walkHandler(
 	de *godirwalk.Dirent,
 	stats chan<- *fileStat,
 ) {
-	if de.IsDevice() || de.IsDir() || !re.MatchString(path) {
+	mode := de.ModeType()
+	if !checkRegularOrSymlink(mode) || !re.MatchString(path) {
 		return
 	}
 	var target string
@@ -124,23 +125,26 @@ func walkHandler(
 	if err != nil {
 		var e error
 		if stat, e = os.Lstat(path); e != nil {
-			mode := de.ModeType()
 			stats <- &fileStat{
 				path, &mode, nil, nil, target, err,
 			}
 			return
 		}
 	}
-	if stat.IsDir() {
+	mode = stat.Mode()
+	if !checkRegularOrSymlink(mode) {
 		return
 	}
-	mode := stat.Mode()
 	modTime := stat.ModTime()
 	size := stat.Size()
 	stats <- &fileStat{
 		path, &mode, &modTime, &size, target, err,
 	}
 	return
+}
+
+func checkRegularOrSymlink(mode os.FileMode) bool {
+	return mode.IsRegular() || mode&os.ModeSymlink != 0
 }
 
 type bigQueryConfig struct {
