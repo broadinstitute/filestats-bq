@@ -31,6 +31,8 @@ func main() {
 	errs := make(chan error, 1)
 	stats := make(chan *fileStat)
 
+	log.Println("Started")
+
 	walk(errs, stats, *path, *regex)
 
 	loadStats(errs, stats, &bigQueryConfig{
