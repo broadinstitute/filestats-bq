@@ -21,32 +21,78 @@ To build the executable for 64-bit Linux on a Mac, just run
 GOOS=linux GOARCH=amd64 go build
 ```
 
+## Output
+
+BigQuery table has the following fields:
+
+| Path | Mode | Modified | Size | Target | Error |
+| ---- | ---- | -------- | ---- | ------ | ----- |
+| /path/to/file | -rw-r--r-- | 2019-01-31 01:02:03.456789 UTC | 987654 | /path/to/linked/file | null |
+
+- `Path` is the absolute "source" path of a file
+- `Mode` represents file mode bits
+- `Modified` gives the timestamp of the last file modification
+- `Size` of the file in bytes
+- if `Path` is a _symlink_, then `Target` gives the actual location of the file
+- `Error` records the first error encountered during file listing
+
+Additionally, the following holds true if `Path` is a _symlink_:
+- if `Mode` starts with `L`, then `Mode`, `Modified`, and `Size` correspond to `Path` itself
+- if `Mode` starts with `-`, then `Mode`, `Modified`, and `Size` correspond to the `Target` file
+
+Here, the difference in semantics stems from the purpose of this module
+to determine the attributes of the actual _files_, not _links_, where possible.
+However, if a _link_ is _broken_ (i.e. its target file does not exist
+or cannot be accessed, then we resort to displaying the attributes of the _link_ itself).
+
+Additionally, you can see the cause of a failure of link resolution
+in the `Error` field, such as `lstat /path/to/linked/file: no such file or directory`.
+
+Finally, on some occasions (mostly when files or directories cannot be accessed)
+`Mode`, `Modified`, and `Size` fields may be empty, which indicates that
+only the `Path` could be discovered by the module.
+In that case, `Error` field documents the reason for the failure, such as
+`stat /path/to/file: permission denied`.
+
 ## Algorithm
+
+The module is roughly organized as follows:
 
 1.  Parse command line flags, which include
     `--path` of the directory for file search,
-    a file path `--regex` to match,
-    and BigQuery `--project`, `--dataset` and `--table` IDs.
+    file path `--regex` to match,
+    BigQuery `--project`, `--dataset` and `--table` IDs,
+    and the path to a Google Service Account `--key`,
+
+    The key could be specified either with `--key`,
+    or via Application Default Credentials.
 
 2.  Start walking the file tree,
     calling an asynchronous handler for each file.
-    If an error occurs for a file,
-    log it and continue.
 
 3.  The file handler:
 
-    1.  verifies that the file is regular
-        (i.e. not a device or directory),
-        and its path matches the regex
+    1.  Verifies that the file is regular or a symlink,
+        and its path matches the regex.
 
-    2.  if the file is a symlink, determines its target
+    2.  If the file is a symlink,
+        fully resolves its target.
 
-    3.  queries file or symlink target stats
-        (mode, modification date, size);
-        if the target is not a regular file, skip next step
+    3.  Requests file or symlink target stats
+        (mode, modification date, size).
 
-    4.  send file path, mode, date, size, and target (if link)
-        as a record to the output channel
+    4.  If the link could be resolved,
+        it requests stats for the link itself.
+
+    5.  If the stats don't correspond to
+        a regular file or a symlink,
+        skips the following steps.
+
+    6.  Captures any file level-errors and attempts
+        to preserve as much information as possible.
+
+    7.  Sends the file path, mode, date, size, target (for a link), and error
+        as a record to the output channel.
 
 4.  Concurrently with the walk, create an output stream
     corresponding to a "BigQuery load" job for the table
@@ -61,7 +107,5 @@ GOOS=linux GOARCH=amd64 go build
     but provides fewer guarantees on the consistency
     of the results.
 
-5.  Write any incoming records into the output stream.
-
-6.  If a _fatal_ error occurs during steps 1-5,
-    log it and terminate the process.
+5.  Write any incoming records into the output stream,
+    as a TSV file.
