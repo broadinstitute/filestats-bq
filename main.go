@@ -14,11 +14,13 @@ import (
 	"cloud.google.com/go/bigquery"
 	"cloud.google.com/go/civil"
 	"github.com/karrick/godirwalk"
+	"google.golang.org/api/option"
 )
 
 func main() {
 	path := flag.String("dir", "", "Directory path for file search")
 	regex := flag.String("regex", "", "File path pattern to match")
+	key := flag.String("key", "", "Path to Google Service Account key file")
 	project := flag.String("project", "", "BigQuery project ID")
 	dataset := flag.String("dataset", "", "BigQuery dataset ID")
 	table := flag.String("table", "", "BigQuery table ID")
@@ -29,8 +31,8 @@ func main() {
 
 	walk(errs, stats, *path, *regex)
 
-	loadStats(errs, stats, &bigQueryID{
-		*project, *dataset, *table,
+	loadStats(errs, stats, &bigQueryConfig{
+		*key, *project, *dataset, *table,
 	})
 
 	if err := <-errs; err != nil {
@@ -116,7 +118,8 @@ func walkHandler(
 	return
 }
 
-type bigQueryID struct {
+type bigQueryConfig struct {
+	key     string
 	project string
 	dataset string
 	table   string
@@ -125,9 +128,9 @@ type bigQueryID struct {
 func loadStats(
 	errs chan<- error,
 	stats <-chan *fileStat,
-	id *bigQueryID,
+	c *bigQueryConfig,
 ) {
-	ctx, loader, writer, err := getWriter(id)
+	ctx, loader, writer, err := getWriter(c)
 	if err != nil {
 		errs <- err
 		return
@@ -176,7 +179,7 @@ type fileStat struct {
 }
 
 func getWriter(
-	id *bigQueryID,
+	c *bigQueryConfig,
 ) (
 	ctx context.Context,
 	loader *bigquery.Loader,
@@ -195,12 +198,16 @@ func getWriter(
 	}
 
 	ctx = context.Background()
-	bq, err := bigquery.NewClient(ctx, id.project)
+	opts := make([]option.ClientOption, 0, 1)
+	if c.key != "" {
+		opts = append(opts, option.WithCredentialsFile(c.key))
+	}
+	bq, err := bigquery.NewClient(ctx, c.project, opts...)
 	if err != nil {
 		return
 	}
 
-	loader = bq.Dataset(id.dataset).Table(id.table).LoaderFrom(source)
+	loader = bq.Dataset(c.dataset).Table(c.table).LoaderFrom(source)
 	loader.WriteDisposition = bigquery.WriteTruncate
 
 	return
