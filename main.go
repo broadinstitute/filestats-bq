@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"time"
@@ -47,6 +48,11 @@ func walk(
 	path string,
 	regex string,
 ) {
+	var err error
+	if path, err = filepath.Abs(path); err != nil {
+		errs <- err
+		return
+	}
 	re := regexp.MustCompile(regex)
 	go func() {
 		defer close(stats)
