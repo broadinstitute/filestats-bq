@@ -28,14 +28,14 @@ GOOS=linux GOARCH=amd64 go build
 
 BigQuery table has the following fields:
 
-| Path | Mode | Modified | Size | Target | Error |
-| ---- | ---- | -------- | ---- | ------ | ----- |
-| /path/to/file | -rw-r--r-- | 2019-01-31 01:02:03.456789 UTC | 987654 | /path/to/linked/file | null |
+| Path | Mode | Size | Modified | Target | Error |
+| ---- | ---- | ---- | -------- | ------ | ----- |
+| /path/to/file | -rw-r--r-- | 987654 | 2019-01-31 01:02:03.456789 UTC | /path/to/linked/file | null |
 
 - `Path` is the absolute "source" path of a file
 - `Mode` represents file mode bits
-- `Modified` gives the timestamp of the last file modification
 - `Size` of the file in bytes
+- `Modified` gives the timestamp of the last file modification
 - if `Path` is a _symlink_, then `Target` gives the actual location of the file
 - `Error` records the first error encountered during file listing
 

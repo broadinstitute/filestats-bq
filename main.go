@@ -137,10 +137,10 @@ func walkHandler(
 	if !checkRegularOrSymlink(mode) {
 		return
 	}
-	modTime := stat.ModTime()
 	size := stat.Size()
+	modTime := stat.ModTime()
 	stats <- &fileStat{
-		path, &mode, &modTime, &size, target, err,
+		path, &mode, &size, &modTime, target, err,
 	}
 	return
 }
@@ -152,8 +152,8 @@ func checkRegularOrSymlink(mode os.FileMode) bool {
 type fileStat struct {
 	path    string
 	mode    *os.FileMode
-	modTime *time.Time
 	size    *int64
+	modTime *time.Time
 	target  string
 	err     error
 }
@@ -225,12 +225,12 @@ func getSchema() []*bigquery.FieldSchema {
 			Description: "File mode bits",
 		},
 		{
-			Name: "Modified", Type: bigquery.TimestampFieldType,
-			Description: "Timestamp of the last file modification",
-		},
-		{
 			Name: "Size", Type: bigquery.IntegerFieldType,
 			Description: "Size of the file, in bytes",
+		},
+		{
+			Name: "Modified", Type: bigquery.TimestampFieldType,
+			Description: "Timestamp of the last file modification",
 		},
 		{
 			Name: "Target", Type: bigquery.StringFieldType,
@@ -260,13 +260,13 @@ func writeStats(
 		if stat.mode != nil {
 			mode = stat.mode.String()
 		}
-		modTime := ""
-		if stat.modTime != nil {
-			modTime = civil.DateTimeOf(*stat.modTime).String()
-		}
 		size := ""
 		if stat.size != nil {
 			size = strconv.FormatInt(*stat.size, 10)
+		}
+		modTime := ""
+		if stat.modTime != nil {
+			modTime = civil.DateTimeOf(*stat.modTime).String()
 		}
 		e := ""
 		if stat.err != nil {
@@ -275,8 +275,8 @@ func writeStats(
 		err = w.Write([]string{
 			stat.path,
 			mode,
-			modTime,
 			size,
+			modTime,
 			stat.target,
 			e,
 		})
