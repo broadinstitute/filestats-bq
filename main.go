@@ -4,13 +4,16 @@ import (
 	"context"
 	"encoding/csv"
 	"flag"
+	"fmt"
 	"io"
 	"log"
 	"os"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -128,7 +131,10 @@ func walkHandler(
 		var e error
 		if stat, e = os.Lstat(path); e != nil {
 			stats <- &fileStat{
-				path, &mode, nil, nil, target, err,
+				path:   path,
+				mode:   &mode,
+				target: target,
+				err:    err,
 			}
 			return
 		}
@@ -137,10 +143,15 @@ func walkHandler(
 	if !checkRegularOrSymlink(mode) {
 		return
 	}
+	var uid, gid *uint32
+	if sys, ok := stat.Sys().(*syscall.Stat_t); ok {
+		uid = &sys.Uid
+		gid = &sys.Gid
+	}
 	size := stat.Size()
 	modTime := stat.ModTime()
 	stats <- &fileStat{
-		path, &mode, &size, &modTime, target, err,
+		path, &mode, uid, gid, &size, &modTime, target, err,
 	}
 	return
 }
@@ -152,6 +163,8 @@ func checkRegularOrSymlink(mode os.FileMode) bool {
 type fileStat struct {
 	path    string
 	mode    *os.FileMode
+	uid     *uint32
+	gid     *uint32
 	size    *int64
 	modTime *time.Time
 	target  string
@@ -225,6 +238,14 @@ func getSchema() []*bigquery.FieldSchema {
 			Description: "File mode bits",
 		},
 		{
+			Name: "User", Type: bigquery.StringFieldType,
+			Description: "Owner user name of the file",
+		},
+		{
+			Name: "Group", Type: bigquery.StringFieldType,
+			Description: "Owner group name of the file",
+		},
+		{
 			Name: "Size", Type: bigquery.IntegerFieldType,
 			Description: "Size of the file, in bytes",
 		},
@@ -255,11 +276,16 @@ func writeStats(
 	defer writer.Close()
 	defer w.Flush()
 
+	users := nameMap{}
+	groups := nameMap{}
+
 	for stat := range stats {
 		mode := ""
 		if stat.mode != nil {
 			mode = stat.mode.String()
 		}
+		user := getUser(stat.uid, users)
+		group := getGroup(stat.gid, groups)
 		size := ""
 		if stat.size != nil {
 			size = strconv.FormatInt(*stat.size, 10)
@@ -275,6 +301,8 @@ func writeStats(
 		err = w.Write([]string{
 			stat.path,
 			mode,
+			user,
+			group,
 			size,
 			modTime,
 			stat.target,
@@ -285,6 +313,48 @@ func writeStats(
 		}
 	}
 	return
+}
+
+type nameMap map[uint32]string
+
+func getOwner(
+	id *uint32,
+	names nameMap,
+	lookup func(id string) string,
+) string {
+	if id == nil {
+		return ""
+	} else if name, ok := names[*id]; ok {
+		return name
+	} else {
+		name := lookup(fmt.Sprint(*id))
+		names[*id] = name
+		return name
+	}
+}
+
+func getUser(
+	uid *uint32,
+	users nameMap,
+) string {
+	return getOwner(uid, users, func(id string) (name string) {
+		if u, err := user.LookupId(id); err == nil {
+			name = u.Username
+		}
+		return
+	})
+}
+
+func getGroup(
+	gid *uint32,
+	groups nameMap,
+) string {
+	return getOwner(gid, groups, func(id string) (name string) {
+		if g, err := user.LookupGroupId(id); err == nil {
+			name = g.Name
+		}
+		return
+	})
 }
 
 func loadJob(

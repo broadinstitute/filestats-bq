@@ -28,12 +28,13 @@ GOOS=linux GOARCH=amd64 go build
 
 BigQuery table has the following fields:
 
-| Path | Mode | Size | Modified | Target | Error |
-| ---- | ---- | ---- | -------- | ------ | ----- |
-| /path/to/file | -rw-r--r-- | 987654 | 2019-01-31 01:02:03.456789 UTC | /path/to/linked/file | null |
+| Path          | Mode       | User | Group | Size   |        Modified                | Target               | Error |
+| ------------- | ---------- | ---- | ----- | ------ | ------------------------------ | -------------------- | ----- |
+| /path/to/file | -rw-r--r-- | user | group | 987654 | 2019-01-31 01:02:03.456789 UTC | /path/to/linked/file | null  |
 
 - `Path` is the absolute "source" path of a file
 - `Mode` represents file mode bits
+- Owner `User` and `Group` names of the file
 - `Size` of the file in bytes
 - `Modified` gives the timestamp of the last file modification
 - if `Path` is a _symlink_, then `Target` gives the actual location of the file
@@ -91,10 +92,17 @@ The module is roughly organized as follows:
         a regular file or a symlink,
         skips the following steps.
 
-    6.  Captures any file level-errors and attempts
+    6.  Looks up user and group names
+        based on `Uid` and `Gid` from the stats.
+
+        These IDs are only available on POSIX systems.
+        In addition, it caches ID -> name mappings,
+        to avoid extra system lookups.
+
+    7.  Captures any file level-errors and attempts
         to preserve as much information as possible.
 
-    7.  Sends the file path, mode, date, size, target (for a link), and error
+    8.  Sends the file path, mode, date, size, target (for a link), and error
         as a record to the output channel.
 
 4.  Concurrently with the walk, create an output stream
