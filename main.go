@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strconv"
+	"sync"
 	"time"
 
 	"cloud.google.com/go/bigquery"
@@ -56,36 +57,41 @@ func walk(
 	re := regexp.MustCompile(regex)
 	go func() {
 		defer close(stats)
+		var wg sync.WaitGroup
 		err := godirwalk.Walk(path, &godirwalk.Options{
 			// FollowSymbolicLinks: true,
 			Unsorted:      true,
-			ErrorCallback: walkErrorCallback,
-			Callback:      walkCallback(re, stats),
+			ErrorCallback: walkErrorCallback(stats),
+			Callback:      walkCallback(re, &wg, stats),
 		})
 		if err != nil {
 			errs <- err
 		}
+		wg.Wait()
 	}()
 }
 
 func walkErrorCallback(
-	path string,
-	err error,
-) godirwalk.ErrorAction {
-	log.Println(err)
-	return godirwalk.SkipNode
+	stats chan<- *fileStat,
+) func(string, error) godirwalk.ErrorAction {
+	return func(path string, err error) godirwalk.ErrorAction {
+		stats <- &fileStat{path: path, err: err}
+		return godirwalk.SkipNode
+	}
 }
 
 func walkCallback(
 	re *regexp.Regexp,
+	wg *sync.WaitGroup,
 	stats chan<- *fileStat,
 ) godirwalk.WalkFunc {
 	return func(path string, de *godirwalk.Dirent) error {
-		errs := make(chan error, 1)
+		wg.Add(1)
 		go func() {
-			errs <- walkHandler(path, re, de, stats)
+			defer wg.Done()
+			walkHandler(path, re, de, stats)
 		}()
-		return <-errs
+		return nil
 	}
 }
 
@@ -94,32 +100,45 @@ func walkHandler(
 	re *regexp.Regexp,
 	de *godirwalk.Dirent,
 	stats chan<- *fileStat,
-) (
-	err error,
 ) {
 	if de.IsDevice() || de.IsDir() || !re.MatchString(path) {
 		return
 	}
-	target := path
+	var target string
+	var err error
 	if de.IsSymlink() {
-		if target, err = os.Readlink(path); err != nil {
+		if target, err = filepath.EvalSymlinks(path); err != nil {
+			if e, ok := err.(*os.PathError); ok {
+				target = e.Path
+			}
+		}
+	}
+	resolved := path
+	if target != "" {
+		resolved = target
+	}
+	var stat os.FileInfo
+	if err == nil {
+		stat, err = os.Stat(resolved)
+	}
+	if err != nil {
+		var e error
+		if stat, e = os.Lstat(path); e != nil {
+			mode := de.ModeType()
+			stats <- &fileStat{
+				path, &mode, nil, nil, target, err,
+			}
 			return
 		}
 	}
-	stat, err := os.Stat(target)
-	if err != nil {
+	if stat.IsDir() {
 		return
 	}
-	if stat.Mode()&os.ModeType != 0 { // not a regular file
-		return
-	}
-	mode := de.ModeType() | stat.Mode()
-	link := ""
-	if de.IsSymlink() {
-		link = target
-	}
+	mode := stat.Mode()
+	modTime := stat.ModTime()
+	size := stat.Size()
 	stats <- &fileStat{
-		path, mode, stat.ModTime(), stat.Size(), link,
+		path, &mode, &modTime, &size, target, err,
 	}
 	return
 }
@@ -164,10 +183,29 @@ func writeStats(
 	defer w.Flush()
 
 	for stat := range stats {
+		mode := ""
+		if stat.mode != nil {
+			mode = stat.mode.String()
+		}
+		modTime := ""
+		if stat.modTime != nil {
+			modTime = civil.DateTimeOf(*stat.modTime).String()
+		}
+		size := ""
+		if stat.size != nil {
+			size = strconv.FormatInt(*stat.size, 10)
+		}
+		e := ""
+		if stat.err != nil {
+			e = stat.err.Error()
+		}
 		err = w.Write([]string{
-			stat.path, stat.mode.String(),
-			civil.DateTimeOf(stat.modTime).String(),
-			strconv.FormatInt(stat.size, 10), stat.link,
+			stat.path,
+			mode,
+			modTime,
+			size,
+			stat.target,
+			e,
 		})
 		if err != nil {
 			break
@@ -178,10 +216,40 @@ func writeStats(
 
 type fileStat struct {
 	path    string
-	mode    os.FileMode
-	modTime time.Time
-	size    int64
-	link    string
+	mode    *os.FileMode
+	modTime *time.Time
+	size    *int64
+	target  string
+	err     error
+}
+
+func getSchema() []*bigquery.FieldSchema {
+	return []*bigquery.FieldSchema{
+		{
+			Name: "Path", Type: bigquery.StringFieldType, Required: true,
+			Description: "Absolute path to the file",
+		},
+		{
+			Name: "Mode", Type: bigquery.StringFieldType,
+			Description: "File mode bits",
+		},
+		{
+			Name: "Modified", Type: bigquery.TimestampFieldType,
+			Description: "Timestamp of the last file modification",
+		},
+		{
+			Name: "Size", Type: bigquery.IntegerFieldType,
+			Description: "Size of the file, in bytes",
+		},
+		{
+			Name: "Target", Type: bigquery.StringFieldType,
+			Description: "Target of the symlink, if applicable",
+		},
+		{
+			Name: "Error", Type: bigquery.StringFieldType,
+			Description: "Error in retrieval of file stats",
+		},
+	}
 }
 
 func getWriter(
@@ -195,13 +263,7 @@ func getWriter(
 	reader, writer := io.Pipe()
 	source := bigquery.NewReaderSource(reader)
 	source.FieldDelimiter = "\t"
-	source.Schema = []*bigquery.FieldSchema{
-		{Name: "Path", Type: bigquery.StringFieldType, Required: true},
-		{Name: "Mode", Type: bigquery.StringFieldType, Required: true},
-		{Name: "Date_modified", Type: bigquery.TimestampFieldType, Required: true},
-		{Name: "Size_bytes", Type: bigquery.IntegerFieldType, Required: true},
-		{Name: "Link", Type: bigquery.StringFieldType},
-	}
+	source.Schema = getSchema()
 
 	ctx = context.Background()
 	opts := make([]option.ClientOption, 0, 1)
