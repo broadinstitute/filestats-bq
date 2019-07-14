@@ -149,11 +149,13 @@ func checkRegularOrSymlink(mode os.FileMode) bool {
 	return mode.IsRegular() || mode&os.ModeSymlink != 0
 }
 
-type bigQueryConfig struct {
-	key     string
-	project string
-	dataset string
-	table   string
+type fileStat struct {
+	path    string
+	mode    *os.FileMode
+	modTime *time.Time
+	size    *int64
+	target  string
+	err     error
 }
 
 func loadStats(
@@ -174,6 +176,71 @@ func loadStats(
 	go func() {
 		errs <- loadJob(ctx, loader)
 	}()
+}
+
+type bigQueryConfig struct {
+	key     string
+	project string
+	dataset string
+	table   string
+}
+
+func getWriter(
+	c *bigQueryConfig,
+) (
+	ctx context.Context,
+	loader *bigquery.Loader,
+	writer *io.PipeWriter,
+	err error,
+) {
+	reader, writer := io.Pipe()
+	source := bigquery.NewReaderSource(reader)
+	source.FieldDelimiter = "\t"
+	source.Schema = getSchema()
+
+	ctx = context.Background()
+	opts := make([]option.ClientOption, 0, 1)
+	if c.key != "" {
+		opts = append(opts, option.WithCredentialsFile(c.key))
+	}
+	bq, err := bigquery.NewClient(ctx, c.project, opts...)
+	if err != nil {
+		return
+	}
+
+	loader = bq.Dataset(c.dataset).Table(c.table).LoaderFrom(source)
+	loader.WriteDisposition = bigquery.WriteTruncate
+
+	return
+}
+
+func getSchema() []*bigquery.FieldSchema {
+	return []*bigquery.FieldSchema{
+		{
+			Name: "Path", Type: bigquery.StringFieldType, Required: true,
+			Description: "Absolute path to the file",
+		},
+		{
+			Name: "Mode", Type: bigquery.StringFieldType,
+			Description: "File mode bits",
+		},
+		{
+			Name: "Modified", Type: bigquery.TimestampFieldType,
+			Description: "Timestamp of the last file modification",
+		},
+		{
+			Name: "Size", Type: bigquery.IntegerFieldType,
+			Description: "Size of the file, in bytes",
+		},
+		{
+			Name: "Target", Type: bigquery.StringFieldType,
+			Description: "Target of the symlink, if applicable",
+		},
+		{
+			Name: "Error", Type: bigquery.StringFieldType,
+			Description: "Error in retrieval of file stats",
+		},
+	}
 }
 
 func writeStats(
@@ -217,73 +284,6 @@ func writeStats(
 			break
 		}
 	}
-	return
-}
-
-type fileStat struct {
-	path    string
-	mode    *os.FileMode
-	modTime *time.Time
-	size    *int64
-	target  string
-	err     error
-}
-
-func getSchema() []*bigquery.FieldSchema {
-	return []*bigquery.FieldSchema{
-		{
-			Name: "Path", Type: bigquery.StringFieldType, Required: true,
-			Description: "Absolute path to the file",
-		},
-		{
-			Name: "Mode", Type: bigquery.StringFieldType,
-			Description: "File mode bits",
-		},
-		{
-			Name: "Modified", Type: bigquery.TimestampFieldType,
-			Description: "Timestamp of the last file modification",
-		},
-		{
-			Name: "Size", Type: bigquery.IntegerFieldType,
-			Description: "Size of the file, in bytes",
-		},
-		{
-			Name: "Target", Type: bigquery.StringFieldType,
-			Description: "Target of the symlink, if applicable",
-		},
-		{
-			Name: "Error", Type: bigquery.StringFieldType,
-			Description: "Error in retrieval of file stats",
-		},
-	}
-}
-
-func getWriter(
-	c *bigQueryConfig,
-) (
-	ctx context.Context,
-	loader *bigquery.Loader,
-	writer *io.PipeWriter,
-	err error,
-) {
-	reader, writer := io.Pipe()
-	source := bigquery.NewReaderSource(reader)
-	source.FieldDelimiter = "\t"
-	source.Schema = getSchema()
-
-	ctx = context.Background()
-	opts := make([]option.ClientOption, 0, 1)
-	if c.key != "" {
-		opts = append(opts, option.WithCredentialsFile(c.key))
-	}
-	bq, err := bigquery.NewClient(ctx, c.project, opts...)
-	if err != nil {
-		return
-	}
-
-	loader = bq.Dataset(c.dataset).Table(c.table).LoaderFrom(source)
-	loader.WriteDisposition = bigquery.WriteTruncate
-
 	return
 }
 
