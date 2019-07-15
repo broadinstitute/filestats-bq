@@ -22,6 +22,8 @@ import (
 	"google.golang.org/api/option"
 )
 
+const csvDelimiter = '\t'
+
 func main() {
 	path := flag.String("dir", "", "Directory path for file search")
 	regex := flag.String("regex", "", "File path pattern to match")
@@ -208,7 +210,7 @@ func getWriter(
 ) {
 	reader, writer := io.Pipe()
 	source := bigquery.NewReaderSource(reader)
-	source.FieldDelimiter = "\t"
+	source.FieldDelimiter = string(csvDelimiter)
 	source.Schema = getSchema()
 
 	ctx = context.Background()
@@ -271,7 +273,7 @@ func writeStats(
 	err error,
 ) {
 	w := csv.NewWriter(writer)
-	w.Comma = '\t'
+	w.Comma = csvDelimiter
 
 	defer writer.Close()
 	defer w.Flush()
