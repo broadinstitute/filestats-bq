@@ -91,7 +91,7 @@ The module is roughly organized as follows:
     3.  Requests file or symlink target stats
         (mode, modification date, size).
 
-    4.  If the link could be resolved,
+    4.  If the link can't be resolved,
         it requests stats for the link itself.
 
     5.  If the stats don't correspond to
@@ -105,10 +105,10 @@ The module is roughly organized as follows:
         In addition, it caches ID -> name mappings,
         to avoid extra system lookups.
 
-    7.  Captures any file level-errors and attempts
+    7.  Captures any file-level errors and attempts
         to preserve as much information as possible.
 
-    8.  Sends the file path, mode, date, size, target (for a link), and error
+    8.  Sends the file stats
         as a record to the output channel.
 
 4.  Concurrently with the walk, create an output stream
