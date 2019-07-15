@@ -16,13 +16,19 @@ filestats-bq --dir /path/to/dir --regex '\.txt$' \
 The Google Service Account here should be assigned
 `BigQuery Data Editor` role on the associated dataset in BigQuery.
 
+## Building
+
 `filestats-bq` can also be distributed as a single executable
 to a different system, so you don't have to have Go installed there.
 
-To build the executable for 64-bit Linux on a Mac, just run
+To build the executable for 64-bit Linux on a Mac, install Docker and run
 ```
-GOOS=linux GOARCH=amd64 go build
+docker build -t filestats-bq .
+docker run --rm --entrypoint cat filestats-bq main > filestats-bq
 ```
+(unfortunately, regular cross-compilation won't work,
+because it needs to compile with CGO, due to
+[an obscure implementation of UID/GID name lookup](https://golang.org/pkg/os/user/#pkg-overview))
 
 ## Output
 
