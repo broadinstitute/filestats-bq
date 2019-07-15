@@ -327,7 +327,10 @@ func getOwner(
 	} else if name, ok := names[*id]; ok {
 		return name
 	} else {
-		name := lookup(fmt.Sprint(*id))
+		nid := fmt.Sprint(*id)
+		if name = lookup(nid); name == "" {
+			name = nid
+		}
 		names[*id] = name
 		return name
 	}
