@@ -275,8 +275,10 @@ func writeStats(
 	w := csv.NewWriter(writer)
 	w.Comma = csvDelimiter
 
-	defer writer.Close()
-	defer w.Flush()
+	defer func() {
+		w.Flush()
+		err = writer.Close()
+	}()
 
 	users := nameMap{}
 	groups := nameMap{}
