@@ -31,6 +31,7 @@ func main() {
 	project := flag.String("project", "", "BigQuery project ID")
 	dataset := flag.String("dataset", "", "BigQuery dataset ID")
 	table := flag.String("table", "", "BigQuery table ID")
+	stdout := flag.Bool("stdout", false, "Output to STDOUT instead of BigQuery")
 	flag.Parse()
 
 	errs := make(chan error, 1)
@@ -41,7 +42,7 @@ func main() {
 	walk(errs, stats, *path, *regex)
 
 	loadStats(errs, stats, &bigQueryConfig{
-		*key, *project, *dataset, *table,
+		*key, *project, *dataset, *table, *stdout,
 	})
 
 	if err := <-errs; err != nil {
@@ -184,12 +185,14 @@ func loadStats(
 		return
 	}
 	go func() {
-		if err := writeStats(writer, stats); err != nil {
+		if err := writeStats(writer, stats); err != nil || c.stdout {
 			errs <- err
 		}
 	}()
 	go func() {
-		errs <- loadJob(ctx, loader)
+		if !c.stdout {
+			errs <- loadJob(ctx, loader)
+		}
 	}()
 }
 
@@ -198,6 +201,7 @@ type bigQueryConfig struct {
 	project string
 	dataset string
 	table   string
+	stdout  bool
 }
 
 func getWriter(
@@ -205,9 +209,14 @@ func getWriter(
 ) (
 	ctx context.Context,
 	loader *bigquery.Loader,
-	writer *io.PipeWriter,
+	writer io.WriteCloser,
 	err error,
 ) {
+	if c.stdout {
+		writer = os.Stdout
+		return
+	}
+
 	reader, writer := io.Pipe()
 	source := bigquery.NewReaderSource(reader)
 	source.FieldDelimiter = string(csvDelimiter)
@@ -267,7 +276,7 @@ func getSchema() []*bigquery.FieldSchema {
 }
 
 func writeStats(
-	writer *io.PipeWriter,
+	writer io.WriteCloser,
 	stats <-chan *fileStat,
 ) (
 	err error,

@@ -16,6 +16,8 @@ filestats-bq --dir /path/to/dir --regex '\.txt$' \
 The Google Service Account here should be assigned
 `BigQuery Data Editor` role on the associated dataset in BigQuery.
 
+Alternatively, use `--stdout` switch to redirect results to STDOUT.
+
 ## Building
 
 `filestats-bq` can also be distributed as a single executable
