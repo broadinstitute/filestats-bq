@@ -6,7 +6,7 @@ to catalogue on-prem files in BigQuery.
 ## Usage
 
 ```
-go get github.com/broadinstitute/filestats-bq
+go get -u github.com/broadinstitute/filestats-bq
 
 filestats-bq --dir /path/to/dir --regex '\.txt$' \
   --key /path/to/service_account_key.json \
