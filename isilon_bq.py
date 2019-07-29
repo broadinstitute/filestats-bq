@@ -59,7 +59,7 @@ def get_publish(project, topic):
       'resume': resume,
     }
     message = json.dumps(data).encode('utf-8')
-    publisher.publish(topic_path, data=message)
+    return publisher.publish(topic_path, data=message)
   return publish
 
 def get_path(dirent):
@@ -196,12 +196,15 @@ def pubsub_callback(publish, insert_rows, isilon_client):
     def callback(message):
       data = json.loads(message.data)
       response = list_dir(isilon_client, data.get('path'), data.get('resume'))
-      if response.resume is not None:
-        publish(data['path'], response.resume)
+      published = set()
       for dirent in response.children:
         if dirent.type == 'container':
           path = get_path(dirent).strip('/')
-          publish(path, response.resume)
+          published.add(publish(path))
+      if response.resume is not None:
+        published.add(publish(data['path'], response.resume))
+      for p in published:
+        p.result()
       insert_rows(message.message_id, response.children)
       message.ack()
     return callback
