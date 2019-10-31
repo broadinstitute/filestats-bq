@@ -18,8 +18,10 @@ steps:
   args:
   - -c
   - |
+    set -e
+
     gcloud iam service-accounts create ${sa_name} \
-      --display-name "Sends on-prem file listings to BigQuery"
+      --display-name "Sends on-prem file listings to BigQuery" || true
 
     gsutil iam ch \
       serviceAccount:${sa_name}@${PROJECT_ID}.iam.gserviceaccount.com:objectViewer \
