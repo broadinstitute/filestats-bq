@@ -30,7 +30,7 @@ steps:
       serviceAccount:${sa_email}:objectViewer \
       gs://${_REGION}.artifacts.${PROJECT_ID}.appspot.com
 
-    gsutil projects add-iam-policy-binding ${PROJECT_ID} \
+    gcloud projects add-iam-policy-binding ${PROJECT_ID} \
       --member "serviceAccount:${sa_email}" \
       --role "roles/bigquery.jobUser"
 
