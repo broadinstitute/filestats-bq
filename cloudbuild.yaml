@@ -1,6 +1,8 @@
 substitutions:
   _REGION: us
   _IMAGE_NAME: filestats-bq
+  _DATASET_LOCATION: US
+  _DATASET_ID: files_on_prem
 steps:
 - name: gcr.io/cloud-builders/docker
   entrypoint: sh
@@ -11,10 +13,11 @@ steps:
   - docker build -t ${image} . &&
     docker push ${image}
 
-- name: gcr.io/cloud-builders/gcloud
+- name: google/cloud-sdk:alpine
   entrypoint: sh
   env:
   - sa_name=${_IMAGE_NAME}
+  - sa_email=${_IMAGE_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
   args:
   - -c
   - |
@@ -24,5 +27,19 @@ steps:
       --display-name "Sends on-prem file listings to BigQuery" || true
 
     gsutil iam ch \
-      serviceAccount:${sa_name}@${PROJECT_ID}.iam.gserviceaccount.com:objectViewer \
+      serviceAccount:${sa_email}:objectViewer \
       gs://${_REGION}.artifacts.${PROJECT_ID}.appspot.com
+
+    bq --location ${_DATASET_LOCATION} mk -f --dataset ${_DATASET_ID}
+
+    apk add jq
+    dataset_json=$(mktemp)
+
+    bq show --format json ${_DATASET_ID} |
+      jq -r ".access |= (.+ [{
+        role: \"roles/bigquery.dataEditor\",
+        userByEmail: \"${sa_email}\"
+      }] | unique)" \
+      > "${dataset_json}"
+
+    bq update --source "${dataset_json}" ${_DATASET_ID}
