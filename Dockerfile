@@ -3,7 +3,7 @@ ARG DIST=/opt
 # -------------------
 # Build Go executable
 
-FROM golang AS build
+FROM gcr.io/cloud-builders/go AS build
 
 ARG DIST
 
