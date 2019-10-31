@@ -32,7 +32,7 @@ steps:
 
     gcloud projects add-iam-policy-binding ${PROJECT_ID} \
       --member "serviceAccount:${sa_email}" \
-      --role "roles/bigquery.jobUser"
+      --role "roles/bigquery.jobUser" > /dev/null
 
     bq --location ${_DATASET_LOCATION} mk -f --dataset ${_DATASET_ID}
 
