@@ -2,6 +2,7 @@
 
 !.dockerignore
 !.gitignore
+!cloudbuild.yaml
 !Dockerfile
 !go.*
 !*.go

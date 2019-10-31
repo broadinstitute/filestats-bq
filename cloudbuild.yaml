@@ -1,0 +1,26 @@
+substitutions:
+  _REGION: us
+  _IMAGE_NAME: filestats-bq
+steps:
+- name: gcr.io/cloud-builders/docker
+  entrypoint: sh
+  env:
+  - image=${_REGION}.gcr.io/${PROJECT_ID}/${_IMAGE_NAME}
+  args:
+  - -c
+  - docker build -t ${image} . &&
+    docker push ${image}
+
+- name: gcr.io/cloud-builders/gcloud
+  entrypoint: sh
+  env:
+  - sa_name=${_IMAGE_NAME}
+  args:
+  - -c
+  - |
+    gcloud iam service-accounts create ${sa_name} \
+      --display-name "Sends on-prem file listings to BigQuery"
+
+    gsutil iam ch \
+      serviceAccount:${sa_name}@${PROJECT_ID}.iam.gserviceaccount.com:objectViewer \
+      gs://${_REGION}.artifacts.${PROJECT_ID}.appspot.com
