@@ -22,12 +22,10 @@ RUN cp main ${DIST}
 # ---------------------------------------------
 # Copy all executables into a clean final image
 
-FROM debian:testing-slim
+FROM gcr.io/distroless/static
 
 ARG DIST
 
-WORKDIR ${DIST}
+COPY --from=build ${DIST} /
 
-COPY --from=build ${DIST} .
-
-ENTRYPOINT ["./main"]
+ENTRYPOINT ["/main"]
