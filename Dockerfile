@@ -26,6 +26,7 @@ FROM gcr.io/distroless/static
 
 ARG DIST
 
+COPY --from=busybox /bin/sh /bin/sh
 COPY --from=build ${DIST} /
 
 ENTRYPOINT ["/main"]
