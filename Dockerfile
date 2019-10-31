@@ -19,14 +19,13 @@ ADD *.go ./
 RUN go build -o main
 RUN cp main ${DIST}
 
-# ---------------------------------------------
-# Copy all executables into a clean final image
+# -----------------------------------------
+# Copy executable into a clean final image
 
-FROM gcr.io/distroless/static
+FROM alpine
 
 ARG DIST
 
-COPY --from=busybox /bin/sh /bin/sh
 COPY --from=build ${DIST} /
 
 ENTRYPOINT ["/main"]
